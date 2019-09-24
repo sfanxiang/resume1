@@ -78,7 +78,7 @@
         function display(file) {
             var blob = new Blob([file.content]);
             var url = window.URL.createObjectURL(blob);
-            window.location.replace(url);
+            window.location.replace('pdfjs/web/viewer.html?file=' + url);
         }
 
         function runDecrypt() {
