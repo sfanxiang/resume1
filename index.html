@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Self-decrypting HTML page</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+    <p id="message">Loading...</p>
+    <script id="data" type="application/json">
+        {"salt":[195,149,18,131,144,19,122,69,144,77,229,156,169,255,110,156],"iv":[171,103,140,130,79,200,62,69,171,157,207,235,199,25,124,161],"encrypted":"lT3nzOrEHz4UM3minv9GqcGMVaK/kMtZZI04Pj+4zUXplP0="}
+    </script>
+    <script>
+        if (window.crypto && !window.crypto.subtle && window.crypto.webkitSubtle) {
+            window.crypto.subtle = window.crypto.webkitSubtle;
+        }
+
+        function base64ToArray(base64) {
+            return new Uint8Array(atob(base64).split('').map(function (c) {
+                return c.charCodeAt(0);
+            }));
+        }
+
+        function deriveKey(password, salt) {
+            var passwordBytes = new TextEncoder('utf-8').encode(password);
+
+            return window.crypto.subtle.importKey(
+                'raw',
+                passwordBytes, {
+                    name: 'PBKDF2'
+                },
+                false,
+                ['deriveKey']
+            ).then(function (key) {
+                return window.crypto.subtle.deriveKey({
+                        name: 'PBKDF2',
+                        salt: salt,
+                        iterations: 200000,
+                        hash: {
+                            name: 'SHA-1'
+                        }
+                    },
+                    key, {
+                        name: 'AES-GCM',
+                        length: 128
+                    },
+                    false,
+                    ['decrypt']
+                )
+            });
+        }
+
+        function decrypt(key, iv, bytes) {
+            return window.crypto.subtle.decrypt({
+                name: 'AES-GCM',
+                length: 128,
+                iv: iv
+            }, key, bytes);
+        }
+
+        function extractDecryptedFile(buffer) {
+            var bytes = new Uint8Array(buffer);
+            var slash_pos = Array.prototype.indexOf.call(bytes, '/'.charCodeAt(0));
+            if (slash_pos == -1) {
+                throw 'Decrypted data is corrupted';
+            } else {
+                var name = new TextDecoder('utf-8').decode(new Uint8Array(Array.prototype.slice.call(bytes, 0, slash_pos)));
+                var content = new Uint8Array(Array.prototype.slice.call(bytes, slash_pos + 1));
+                return {
+                    name: name,
+                    content: content
+                };
+            }
+        }
+
+        function display(file) {
+            var blob = new Blob([file.content]);
+            var url = window.URL.createObjectURL(blob);
+            window.location.replace(url);
+        }
+
+        function runDecrypt() {
+            if (!window.crypto) {
+                alert(
+                    'Full support for the WebCrypto API is needed for decryption. Please use one of the following browsers: Chrome 37+, Firefox 34+, Safari 7+, Opera 24+'
+                )
+            }
+            setTimeout(function () {
+                var data = JSON.parse(document.getElementById('data').textContent);
+                var salt = new Uint8Array(data.salt);
+                var iv = new Uint8Array(data.iv);
+                var encrypted = base64ToArray(data.encrypted);
+
+                var password = window.location.hash.substr(1);
+                deriveKey(password, salt)
+                    .then(function (key) {
+                        return decrypt(key, iv, encrypted);
+                    })
+                    .catch(function () {
+                        throw 'Wrong password or corrupted document.';
+                    })
+                    .then(extractDecryptedFile)
+                    .then(display)
+                    .catch(function (e) {
+                        document.getElementById('message').textContent = 'Error decrypting: ' + e;
+                    });
+            }, 0);
+        }
+
+        window.onload = function() {
+            document.getElementById('message').textContent = 'Loading...';
+            runDecrypt();
+        };
+        window.onhashchange = function() {
+            document.getElementById('message').textContent = 'Loading...';
+            runDecrypt();
+        };
+    </script>
+</body>
+
+</html>
