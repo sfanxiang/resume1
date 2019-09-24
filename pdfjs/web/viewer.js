@@ -1080,7 +1080,18 @@ var PDFViewerApplication = {
       var blob = new Blob([data], {
         type: 'application/pdf'
       });
-      downloadManager.download(blob, url, filename);
+
+      var encrypted_html_download_file_name_string = function(name) {
+          var url = window.location.href;
+          name = name.replace(/[\[\]]/g, '\\$&');
+          var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+              results = regex.exec(url);
+          if (!results) return null;
+          if (!results[2]) return '';
+          return decodeURIComponent(results[2].replace(/\+/g, ' '));
+      }('download_file_name');
+
+      downloadManager.download(blob, url, encrypted_html_download_file_name_string);
     }).catch(downloadByUrl);
   },
   fallback: function fallback(featureId) {},
