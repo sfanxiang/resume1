@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Get Key</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+    <div id="main">
+    <p>Requires JavaScript.</p>
+    </div>
+    <script id="data" type="application/json">
+        {"salt":[65,98,55,37,194,17,234,69,217,29,168,28,55,12,114,173]}
+    </script>
+    <script>
+        if (window.crypto && !window.crypto.subtle && window.crypto.webkitSubtle) {
+            window.crypto.subtle = window.crypto.webkitSubtle;
+        }
+
+        function textEncode(str) {
+            if (window.TextEncoder) {
+                return new TextEncoder('utf-8').encode(str);
+            }
+            var utf8 = unescape(encodeURIComponent(str));
+            var result = new Uint8Array(utf8.length);
+            for (var i = 0; i < utf8.length; i++) {
+                result[i] = utf8.charCodeAt(i);
+            }
+            return result;
+        }
+
+        function deriveKey(password, salt) {
+            var passwordBytes = textEncode(password);
+
+            return window.crypto.subtle.importKey(
+                'raw',
+                passwordBytes, {
+                    name: 'PBKDF2'
+                },
+                false,
+                ['deriveKey']
+            ).then(function (key) {
+                return window.crypto.subtle.deriveKey({
+                        name: 'PBKDF2',
+                        salt: salt,
+                        iterations: 200000,
+                        hash: {
+                            name: 'SHA-1'
+                        }
+                    },
+                    key, {
+                        name: 'AES-GCM',
+                        length: 128
+                    },
+                    true,
+                    ['decrypt']
+                )
+            });
+        }
+
+        function runGetKey() {
+            if (!window.crypto) {
+                alert(
+                    'Full support for the WebCrypto API is needed for decryption. Please use one of the following browsers: Chrome 37+, Firefox 34+, Safari 7+, Opera 24+'
+                )
+            }
+            setTimeout(function () {
+                var data = JSON.parse(document.getElementById('data').textContent);
+                var salt = new Uint8Array(data.salt);
+
+                var password = window.location.hash.substr(1);
+                deriveKey(password, salt)
+                    .then(function (key) {
+                        return window.crypto.subtle.exportKey('raw', key).then(function(key) {
+                            key = btoa(String.fromCharCode.apply(null, new Uint8Array(key)));
+                            key = key.replace(/\//g, '_').replace(/\+/g, '-');
+                            document.getElementById('main').innerHTML = '<p id=\"message\"></p>';
+                            document.getElementById('message').textContent = key;
+                        })
+                    })
+                    .catch(function (e) {
+                        document.getElementById('main').innerHTML = '<p id=\"message\"></p>';
+                        document.getElementById('message').textContent = 'Error: ' + e;
+                    });
+            }, 0);
+        }
+
+        window.onload = function() {
+            document.getElementById('main').innerHTML = '<p>Loading...</p>';
+            runGetKey();
+        };
+        window.onhashchange = function() {
+            document.getElementById('main').innerHTML = '<p>Loading...</p>';
+            runGetKey();
+        };
+    </script>
+</body>
+
+</html>
